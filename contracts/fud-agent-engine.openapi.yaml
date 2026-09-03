@@ -1,0 +1,105 @@
+openapi: 3.1.0
+info:
+  title: FUD Agent → FUDmarkets internal contract
+  version: 1.0.0
+  description: >-
+    Private service boundary. The agent normalizes authenticated social events;
+    FUDmarkets resolves the linked identity, validates the active user grant,
+    applies caps/replay protection and calls the canonical V2 engine.
+paths:
+  /internal/agent/v1/actions:
+    post:
+      summary: Submit one normalized, idempotent social action
+      security:
+        - fudAgentHmac: []
+      parameters:
+        - in: header
+          name: X-FUD-Agent-ID
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-FUD-Agent-Timestamp
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-FUD-Agent-Nonce
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: X-FUD-Agent-Signature
+          required: true
+          schema: { type: string, pattern: "^[0-9a-f]{64}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActionRequest"
+      responses:
+        "200":
+          description: Exact retry or successfully accepted action
+        "401":
+          description: Invalid/stale service signature
+        "403":
+          description: Identity, consent, capability, cap or channel rejection
+        "409":
+          description: Replay collision
+components:
+  securitySchemes:
+    fudAgentHmac:
+      type: apiKey
+      in: header
+      name: X-FUD-Agent-Signature
+  schemas:
+    ActionRequest:
+      type: object
+      additionalProperties: false
+      required: [version, identity, privateChat, sourceEventId, occurredAt, intent]
+      properties:
+        version: { const: 1 }
+        identity:
+          type: object
+          additionalProperties: false
+          required: [channel, externalIdentity]
+          properties:
+            channel: { enum: [telegram, x] }
+            externalIdentity: { type: string, maxLength: 256 }
+        privateChat: { type: boolean }
+        sourceEventId: { type: string, maxLength: 256 }
+        occurredAt: { type: string, format: date-time }
+        intent:
+          oneOf:
+            - $ref: "#/components/schemas/OpenMarket"
+            - $ref: "#/components/schemas/PlaceOrder"
+            - $ref: "#/components/schemas/CancelOrder"
+    OpenMarket:
+      type: object
+      additionalProperties: false
+      required: [kind, token, chain, timeframe, side, amountUsdc]
+      properties:
+        kind: { const: market.open_with_position }
+        token: { type: string, maxLength: 64 }
+        chain: { const: SOL }
+        timeframe: { enum: [6h, 12h, 24h] }
+        side: { enum: [long, short] }
+        amountUsdc: { type: number, exclusiveMinimum: 0 }
+        message: { type: string, maxLength: 140 }
+    PlaceOrder:
+      type: object
+      additionalProperties: false
+      required: [kind, marketId, side, amountUsdc]
+      properties:
+        kind: { const: order.place }
+        marketId: { type: string }
+        side: { enum: [long, short] }
+        amountUsdc: { type: number, exclusiveMinimum: 0 }
+        maxPriceCents: { type: integer, minimum: 1, maximum: 99 }
+    CancelOrder:
+      type: object
+      additionalProperties: false
+      required: [kind, marketId, orderId]
+      properties:
+        kind: { const: order.cancel }
+        marketId: { type: string }
+        orderId: { type: string }
+

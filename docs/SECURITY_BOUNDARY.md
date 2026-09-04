@@ -6,7 +6,6 @@
 - Channel-specific UX and replies.
 - Normalization of external identities and immutable source-event IDs.
 - Strict parsing into an allowlisted action schema.
-- A dedicated delegate signer only when a user grant explicitly permits it.
 - Signed service-to-service requests and operational telemetry.
 
 ## FUDmarkets owns
@@ -17,6 +16,7 @@
 - Balances, reservations, matching, fees and market state.
 - Market creation, chain submission, settlement and withdrawals.
 - Treasury, wallet custody material and the canonical audit trail.
+- Magic grant verification and the dedicated KMS delegate signer.
 
 ## Non-negotiable rules
 
@@ -48,4 +48,3 @@ FUDmarkets must enforce a short timestamp window, consume each nonce once and
 compare signatures in constant time. The source event ID is a second, durable
 idempotency layer because a new request nonce can still retry the same provider
 event.
-

@@ -4,12 +4,12 @@
 
 - [x] Define the versioned action contract.
 - [x] Add agent-side HMAC signing.
-- [ ] Add HMAC verification and one-time nonce storage to FUDmarkets.
-- [ ] Mount `POST /internal/agent/v1/actions` in FUDmarkets.
-- [ ] Resolve the external identity only in FUDmarkets.
-- [ ] Check grant, capability, expiry and caps before every execution.
-- [ ] Store a durable idempotency receipt keyed by channel + source event ID.
-- [ ] Return the original receipt for exact retries and `409` for collisions.
+- [x] Add HMAC verification and one-time nonce storage to FUDmarkets.
+- [x] Mount `POST /internal/agent/v1/actions` in FUDmarkets.
+- [x] Resolve the external identity only in FUDmarkets.
+- [x] Check grant, capability, expiry and caps before every execution.
+- [x] Store a durable idempotency receipt keyed by channel + source event ID.
+- [x] Return the original receipt for exact retries and reject collisions.
 - [ ] Add cross-repository contract tests.
 
 ## 2. Complete the V2 capabilities
@@ -44,8 +44,8 @@
 
 - [x] Preserve V2 authorization, consent, grant store and Solana provider code.
 - [ ] Choose the production Solana embedded-wallet/delegation provider.
-- [ ] Store the delegate key in KMS/HSM with a narrowly scoped IAM role.
-- [ ] Bind every signed action to the active user grant and exact payload.
+- [x] Keep delegate signing in FUDmarkets behind the AWS KMS implementation.
+- [x] Bind every signed action to the active user grant and exact payload.
 - [ ] Exercise revoke, expiry, per-action cap and daily-cap end-to-end tests.
 - [ ] Confirm legal/product wording for agent authorization.
 
@@ -57,4 +57,3 @@
 - [ ] Canary one channel and a small allowlist of users.
 - [ ] Compare receipts against V1 behavior before enabling value movement.
 - [ ] Disable V1 bot workers only after the canary and rollback test pass.
-

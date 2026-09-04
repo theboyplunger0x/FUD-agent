@@ -41,8 +41,8 @@ intent parser and the authorization checks in FUDmarkets.
   implemented and tested.
 - The current Telegram, X, V1 autosign and V2 Solana agentic code is preserved in
   `reference/` as an extraction snapshot from FUDmarkets commit `4b578a01`.
-- The FUDmarkets endpoint `/internal/agent/v1/actions` is specified but is not yet
-  mounted in the main backend.
+- The FUDmarkets endpoint `/internal/agent/v1/actions` is implemented on the
+  integration branch `codex/agent-gateway-v2-solana`; it is not production-armed.
 - Current V2 agentic execution supports `order.place` and `order.cancel`.
   `market.open_with_position` still needs its canonical backend implementation.
 - Provider-specific Telegram and X adapters still need to be migrated out of the
@@ -90,7 +90,6 @@ adapters verify provider authenticity.
 ## Secret policy
 
 Never add `DATABASE_URL`, `JWT_SECRET`, a treasury key, a user-wallet key, the V2
-operator key or a raw Magic secret to this repository. The agent gets only channel
-credentials, a dedicated service HMAC secret and—when enabled—a narrowly scoped
-delegate KMS key.
-
+operator key, a delegate-signing key or a raw Magic secret to this repository. The
+agent gets only channel credentials and a dedicated service HMAC secret. Magic
+grant verification and AWS KMS delegate signing remain inside FUDmarkets.

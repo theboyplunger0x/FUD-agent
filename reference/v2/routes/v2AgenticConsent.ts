@@ -163,6 +163,12 @@ export async function registerV2AgenticConsentRoutes(app: FastifyInstance): Prom
           client,
           { ...grant, spentUsdcBaseUnits: 0, revokedAtSec: null },
         );
+        await client.query(
+          `UPDATE v2_agentic_grants
+              SET wallet_grant_signature=$2,updated_at=clock_timestamp()
+            WHERE id=$1`,
+          [grant.id, req.body.grant_signature],
+        );
         await client.query("COMMIT");
       } catch (error) {
         await client.query("ROLLBACK");

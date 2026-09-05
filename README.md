@@ -39,10 +39,12 @@ intent parser and the authorization checks in FUDmarkets.
 
 - The isolated gateway, strict parser, HMAC request signing and API contract are
   implemented and tested.
-- The current Telegram, X, V1 autosign and V2 Solana agentic code is preserved in
-  `reference/` as an extraction snapshot from FUDmarkets commit `4b578a01`.
-- The FUDmarkets endpoint `/internal/agent/v1/actions` is implemented on the
-  integration branch `codex/agent-gateway-v2-solana`; it is not production-armed.
+- The current Telegram, X, X account-linking, `x-poster`, V1 autosign and V2
+  Solana agentic code is preserved in `reference/`. The original extraction was
+  made at `4b578a01` and the V1 bot snapshots were verified byte-for-byte against
+  FUDmarkets `origin/main` commit `73513082` on 2026-09-05.
+- The FUDmarkets endpoint `/internal/agent/v1/actions` and its HMAC/auth seam are
+  now present on FUDmarkets `origin/main`; they are not production-armed.
 - Current V2 agentic execution supports `order.place` and `order.cancel`.
   `market.open_with_position` still needs its canonical backend implementation.
 - Provider-specific Telegram and X adapters still need to be migrated out of the
@@ -85,6 +87,12 @@ adapters verify provider authenticity.
 - `contracts/fud-agent-engine.openapi.yaml`: cross-repository API contract.
 - `docs/SECURITY_BOUNDARY.md`: ownership and trust rules.
 - `docs/EXTRACTION_CHECKLIST.md`: executable migration sequence.
+- `docs/CHANNELS_AND_IDENTITY.md`: exact Telegram/X APIs, posting fallbacks and
+  identity-linking ownership.
+- `docs/ENVIRONMENT_CONTRACT.md`: every credential/config name and which service
+  is allowed to own it.
+- `docs/MONOLITH_DEPENDENCIES.md`: functionality that the snapshots currently
+  import from FUDmarkets and the replacement boundary.
 - `reference/`: read-only snapshot of the existing implementation.
 
 ## Secret policy

@@ -24,6 +24,7 @@
 ## 3. Extract Telegram
 
 - [x] Preserve the full V1 Telegram source in `reference/v1/fud-bot`.
+- [x] Document the Telegram identity-linking schema and backend ownership.
 - [ ] Move Telegram command and callback UX into an active adapter.
 - [ ] Verify Telegram webhook secret before accepting events.
 - [ ] Require private chat for money-moving actions.
@@ -34,11 +35,16 @@
 ## 4. Extract X
 
 - [x] Preserve the full V1 X source in `reference/v1/fud-bot`.
+- [x] Preserve the official OAuth linking route and `x-poster` service.
+- [x] Document twitterapi.io read calls, official X posting and the actual
+  proactive-post fallback separately.
 - [ ] Move polling/webhook ingestion and reply UX into an active adapter.
 - [ ] Verify/canonicalize author ID, tweet ID and conversation context.
 - [ ] Replace direct PostgreSQL/JWT/service imports with `FudEngineClient`.
 - [ ] Separate optional LLM interpretation from execution authorization.
 - [ ] Add rate-limit, pagination, restart and duplicate-delivery tests.
+- [ ] Remove the V1 fallback from `X_BOT_*` to user-linking `X_API_*` credentials.
+- [ ] Decide whether to retire dormant twitterapi.io v2/v3 session posting code.
 
 ## 5. Delegate signing and consent
 

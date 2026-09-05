@@ -11,6 +11,7 @@ import {
 } from "./agenticAuthorization.js";
 import {
   activateExclusiveAgenticGrantInTransaction,
+  loadActiveAgenticGrantMaterial,
   persistAgenticGrant,
   revokeAllAgenticGrantsForUserInTransaction,
   revokeAgenticGrant,
@@ -244,6 +245,33 @@ test("activating a new grant atomically revokes every older active grant", async
     { id: first.id, active: false },
     { id: second.id, active: true },
   ]);
+});
+
+test("social gateway loads only a signed active grant and returns its immutable definition", async () => {
+  const db = await makeTestDb();
+  const nowSec = Math.floor(Date.now() / 1_000);
+  const userId = await createUser(db, "agentic-material", "100");
+  const marketId = await createMarket(db, nowSec + 3_600, userId);
+  const active = grant(userId, marketId, nowSec + 1_800);
+
+  await db.query("BEGIN");
+  await activateExclusiveAgenticGrantInTransaction(db, active);
+  await db.query("COMMIT");
+  await expectCode("grant_signature_not_stored", () => (
+    loadActiveAgenticGrantMaterial(db, userId)
+  ));
+
+  await db.query(
+    "UPDATE v2_agentic_grants SET wallet_grant_signature=$2 WHERE id=$1",
+    [active.id, "signed-by-user-wallet"],
+  );
+  const material = await loadActiveAgenticGrantMaterial(db, userId);
+  assert.equal(material.grantSignature, "signed-by-user-wallet");
+  assert.equal(material.grant.id, active.id);
+  assert.equal(material.grant.userId, userId);
+  assert.deepEqual(material.grant.allowedCapabilities, ["order.place", "order.cancel"]);
+  assert.equal("spentUsdcBaseUnits" in material.grant, false);
+  assert.equal("revokedAtSec" in material.grant, false);
 });
 
 test("revoke-all shares the activation lock and revokes the current provider grant", async () => {

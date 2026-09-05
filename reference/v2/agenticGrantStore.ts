@@ -9,6 +9,7 @@ import {
   type AgenticV2Action,
   type VerifiedAgenticIntent,
 } from "./agenticAuthorization.js";
+import type { SolanaAgenticGrantDefinitionV1 } from "./solanaAgenticProvider.js";
 
 type GrantRow = {
   id: string;
@@ -52,6 +53,11 @@ export type AgenticConsumption = {
   replay: boolean;
   orderId: string | null;
   authorizationValueUsdcBaseUnits: number;
+};
+
+export type ActiveAgenticGrantMaterial = {
+  grant: SolanaAgenticGrantDefinitionV1;
+  grantSignature: string;
 };
 
 function safeInteger(value: string, code: string): number {
@@ -149,6 +155,46 @@ function grantFromRow(row: GrantRow): AgenticGrant {
       ? null
       : safeInteger(row.revoked_at_sec, "bad_persisted_revocation"),
   };
+}
+
+/**
+ * Load the one active, browser-authorized grant used by the social gateway.
+ * The database clock is authoritative. Grants created before the signature
+ * column landed deliberately fail closed and must be renewed by the user.
+ */
+export async function loadActiveAgenticGrantMaterial(
+  db: Queryable,
+  userId: string,
+  provider = "magic",
+): Promise<ActiveAgenticGrantMaterial> {
+  const selected = await db.query<GrantRow & { wallet_grant_signature: string | null }>(
+    `SELECT id,version,provider,user_id,wallet_address,chain,session_delegate,target_program,
+            environment,audience,allowed_channels,allowed_capabilities,allowed_market_ids,
+            max_per_order_usdc::text,max_total_usdc::text,spent_usdc::text,
+            floor(extract(epoch from expires_at))::bigint::text AS expires_at_sec,
+            CASE WHEN revoked_at IS NULL THEN NULL
+                 ELSE floor(extract(epoch from revoked_at))::bigint::text END AS revoked_at_sec,
+            floor(extract(epoch from clock_timestamp()))::bigint::text AS database_now_sec,
+            definition_hash,wallet_grant_signature
+       FROM v2_agentic_grants
+      WHERE user_id=$1::uuid AND provider=$2 AND revoked_at IS NULL
+        AND expires_at>clock_timestamp()
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [userId, provider],
+  );
+  const row = selected.rows[0];
+  if (!row) throw new AgenticAuthorizationError("active_grant_not_found");
+  if (!row.wallet_grant_signature?.trim()) {
+    throw new AgenticAuthorizationError("grant_signature_not_stored");
+  }
+  const persisted = grantFromRow(row);
+  if (persisted.revokedAtSec !== null) throw new AgenticAuthorizationError("grant_revoked");
+  if (agenticGrantDefinitionHash(persisted) !== row.definition_hash) {
+    throw new AgenticAuthorizationError("grant_definition_mismatch");
+  }
+  const { spentUsdcBaseUnits: _spent, revokedAtSec: _revoked, ...grant } = persisted;
+  return { grant, grantSignature: row.wallet_grant_signature };
 }
 
 function validatePersistableGrant(grant: AgenticGrant): void {

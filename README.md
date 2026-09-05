@@ -1,59 +1,70 @@
 # FUD Agent
 
-Isolated social-agent gateway for FUD Markets. It receives authenticated events
-from Telegram or X, converts them into a small set of deterministic intents and
-sends those intents to the canonical FUDmarkets backend through a signed internal
-API.
+> Turn authenticated Telegram and X activity into safe, permissioned actions on
+> the FUD Markets V2 engine.
 
-This repository does **not** own balances, user wallets, market state, matching,
-settlement or treasury keys. Those remain in FUDmarkets.
+FUD Agent is the isolated social gateway for FUD Markets. It receives events
+from Telegram or X, verifies and normalizes them, converts commands into a small
+set of deterministic intents and sends a signed request to the canonical
+FUDmarkets backend.
 
-## Why this repository exists
+The repository contains both the new gateway and the full historical context
+needed to migrate the V1 bots without losing behavior.
 
-The V1 bots live inside the main backend and can access PostgreSQL, mint user JWTs
-and call money-moving services directly. That makes the bot process too powerful
-and makes a Solana migration unnecessarily risky. This repository creates a hard
-boundary:
+## The idea
 
 ```text
 Telegram / X
-      |
-      v
-provider verification + command parsing       (this repository)
-      |
-      v  HMAC-signed request + source event id
-FUDmarkets internal agent API                  (main repository)
-      |
-      +-- linked identity
-      +-- explicit user grant / autosign policy
-      +-- amount and time caps
-      +-- replay protection
-      +-- balances + V2 engine + chain execution
+      │
+      ▼
+provider verification + UX + deterministic parsing       FUD Agent
+      │
+      ▼  HMAC request + immutable source event ID
+identity + grant + limits + replay protection             FUDmarkets
+      │
+      ▼
+balances + matching + settlement + Solana V2 engine       Canonical backend
 ```
 
-An LLM may help interpret natural language in a future adapter, but it must never
-directly create a value-moving request. Every action must pass through a strict
-intent parser and the authorization checks in FUDmarkets.
+The agent may understand what a user wants, but it never gets unilateral access
+to their funds. FUDmarkets resolves the linked identity and revalidates consent,
+capabilities, expiry, per-action limits, daily limits and idempotency before any
+execution.
 
-## Current status
+## Why it is separate
 
-- The isolated gateway, strict parser, HMAC request signing and API contract are
-  implemented and tested.
-- The current Telegram, X, X account-linking, `x-poster`, V1 autosign and V2
-  Solana agentic code is preserved in `reference/`. The original extraction was
-  made at `4b578a01` and the V1 bot snapshots were verified byte-for-byte against
-  FUDmarkets `origin/main` commit `73513082` on 2026-09-05.
-- The FUDmarkets endpoint `/internal/agent/v1/actions` and its HMAC/auth seam are
-  now present on FUDmarkets `origin/main`; they are not production-armed.
-- Current V2 agentic execution supports `order.place` and `order.cancel`.
-  `market.open_with_position` still needs its canonical backend implementation.
-- Provider-specific Telegram and X adapters still need to be migrated out of the
-  snapshot and wired to the gateway.
+The original V1 Telegram and X workers run inside the main backend. They can
+query PostgreSQL, mint user JWTs and call autosign, vault and chain services
+directly. That worked, but it gives a social bot far more power than it needs.
 
-Therefore this is a safe, independently buildable extraction foundation—not yet
-a production replacement for the V1 bots.
+This extraction creates a strict boundary:
 
-## Supported intents
+- FUD Agent owns provider credentials, provider verification, channel UX,
+  parsing and signed service requests.
+- FUDmarkets owns identities, wallets, Magic grants, balances, trading,
+  settlement, KMS signing and the audit trail.
+- An LLM can suggest an interpretation or draft a reply; its output must still
+  pass the typed parser and backend authorization.
+
+## Current state
+
+| Area | Status |
+| --- | --- |
+| Isolated Fastify gateway | Ready and tested |
+| Deterministic command parser | Ready and tested |
+| HMAC service authentication | Ready and tested |
+| Cross-repository OpenAPI contract | Ready |
+| FUDmarkets `/internal/agent/v1/actions` seam | Present on FUDmarkets `main` |
+| V2 `order.place` and `order.cancel` | Implemented in the backend seam |
+| V2 `market.open_with_position` | Contract defined; canonical execution pending |
+| Telegram provider adapter | Full V1 behavior preserved; active extraction pending |
+| X provider adapter | Full V1 behavior preserved; active extraction pending |
+| Production cutover | Not armed |
+
+This is a safe, independently buildable migration foundation. It is not yet the
+production replacement for the V1 workers.
+
+## Supported command grammar
 
 ```text
 open $BONK 6h long $25 optional thesis
@@ -61,43 +72,118 @@ buy <market-id> short $10 max 42c
 cancel <market-id> <order-id>
 ```
 
-Markets are Solana-only and use the product timeframes `6h`, `12h` and `24h`.
+The new product path is Solana-only and accepts `6h`, `12h` and `24h` markets.
+Deprecated V1 timeframes are rejected by the parser.
 
-## Local development
+## X and Telegram coverage
 
-Requirements: Node.js 20 or newer.
+The handoff includes the complete integration map, not only the command parser:
+
+- twitterapi.io reads mentions, tweets, recent posts and quote tweets;
+- the official X API posts replies from `@FUDmarkets` using OAuth 1.0a;
+- the separate `x-poster` service is preserved as the optional proactive-post
+  browser-session fallback;
+- the official OAuth flow that links an X account to a FUD user is preserved;
+- Telegram linking, commands, inline keyboards, market flow, presets and the X
+  reply-approval workflow are preserved;
+- the relevant identity schema and every environment-variable name are mapped.
+
+See [Channels and identity](docs/CHANNELS_AND_IDENTITY.md) for the exact API and
+credential split.
+
+## Run locally
+
+Requires Node.js 20 or newer.
 
 ```bash
+git clone https://github.com/theboyplunger0x/FUD-agent.git
+cd FUD-agent
 cp .env.example .env
 npm install
 npm run check
 npm run dev
 ```
 
-The service exposes `GET /health`. `POST /events` is an internal normalized-event
-route for development; do not expose it publicly until the Telegram/X ingress
-adapters verify provider authenticity.
+The service exposes:
 
-## Repository map
+- `GET /health` — local health check;
+- `POST /events` — normalized development ingress.
 
-- `src/domain.ts`: channel event schema and deterministic intent parser.
-- `src/request-signing.ts`: versioned HMAC service authentication.
-- `src/engine-client.ts`: the only active connection to FUDmarkets.
-- `src/gateway.ts`: validation → parsing → engine request.
-- `contracts/fud-agent-engine.openapi.yaml`: cross-repository API contract.
-- `docs/SECURITY_BOUNDARY.md`: ownership and trust rules.
-- `docs/EXTRACTION_CHECKLIST.md`: executable migration sequence.
-- `docs/CHANNELS_AND_IDENTITY.md`: exact Telegram/X APIs, posting fallbacks and
-  identity-linking ownership.
-- `docs/ENVIRONMENT_CONTRACT.md`: every credential/config name and which service
-  is allowed to own it.
-- `docs/MONOLITH_DEPENDENCIES.md`: functionality that the snapshots currently
-  import from FUDmarkets and the replacement boundary.
-- `reference/`: read-only snapshot of the existing implementation.
+Do not expose `/events` publicly until the active Telegram/X adapters perform
+provider-specific authenticity verification.
 
-## Secret policy
+## Repository guide
 
-Never add `DATABASE_URL`, `JWT_SECRET`, a treasury key, a user-wallet key, the V2
-operator key, a delegate-signing key or a raw Magic secret to this repository. The
-agent gets only channel credentials and a dedicated service HMAC secret. Magic
-grant verification and AWS KMS delegate signing remain inside FUDmarkets.
+```text
+src/
+  domain.ts             normalized events + strict intent parser
+  request-signing.ts    versioned HMAC signing and verification
+  engine-client.ts      the only active connection to FUDmarkets
+  gateway.ts            event -> intent -> signed engine request
+  server.ts             Fastify entrypoint
+
+contracts/
+  fud-agent-engine.openapi.yaml
+
+docs/
+  CHANNELS_AND_IDENTITY.md    exact X/Telegram flows and API ownership
+  ENVIRONMENT_CONTRACT.md     variables and secret ownership by service
+  MONOLITH_DEPENDENCIES.md    what V1 imports and how to replace it
+  SECURITY_BOUNDARY.md        non-negotiable trust rules
+  EXTRACTION_CHECKLIST.md     executable migration/cutover checklist
+
+reference/
+  v1/                    exact V1 bots, auth, autosign and x-poster context
+  v2/                    current gateway, grants, Magic and Solana sources/tests
+  SOURCE_MANIFEST.md     snapshot provenance and synchronization point
+```
+
+Files under `reference/` are deliberately excluded from the active TypeScript
+build. They are migration evidence, not code to deploy unchanged.
+
+## Recommended next work
+
+1. Extract the Telegram adapter and preserve its existing UX while replacing
+   direct SQL/JWT/autosign access with `FudEngineClient`.
+2. Extract X ingestion and posting, keeping twitterapi.io reads, official API
+   replies and `x-poster` fallback as explicit separate components.
+3. Add provider fixtures, duplicate-delivery, pagination, restart and rate-limit
+   tests.
+4. Implement atomic `market.open_with_position` in the canonical V2 engine,
+   including partial-failure and refund semantics.
+5. Run shadow mode, then a restricted canary, before disabling V1 workers.
+
+The detailed order and acceptance criteria live in
+[the extraction checklist](docs/EXTRACTION_CHECKLIST.md).
+
+## Security rules
+
+Never add any of the following to this repository:
+
+- `DATABASE_URL` or production database credentials;
+- `JWT_SECRET`;
+- a Magic secret/admin key;
+- user-wallet, treasury, operator or delegate private keys;
+- AWS KMS signing access;
+- Playwright/X session cookies.
+
+FUD Agent receives only channel credentials and a dedicated service HMAC
+secret. Wallet/grant verification and all value-moving execution stay inside
+FUDmarkets. See [Security boundary](docs/SECURITY_BOUNDARY.md) and
+[Environment contract](docs/ENVIRONMENT_CONTRACT.md).
+
+## Verification
+
+```bash
+npm run typecheck
+npm test
+npm run check
+```
+
+The current suite covers intent parsing, allowed Solana timeframes, Telegram DM
+enforcement, request normalization, HMAC verification, tampering and stale
+requests.
+
+---
+
+Built as the social execution boundary for the next version of FUD Markets.
